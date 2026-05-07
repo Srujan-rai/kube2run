@@ -1,6 +1,6 @@
 # kube2run
 
-kube2run inspects every Deployment in a Kubernetes cluster and produces a self-contained HTML report that scores each microservice for Cloud Run compatibility — with a verdict, list of blockers and warnings (each with a specific fix), and a ready-to-run `gcloud run deploy` command.
+kube2run inspects every Deployment in a Kubernetes cluster and produces a self-contained HTML report that scores each microservice for Cloud Run compatibility  with a verdict, list of blockers and warnings (each with a specific fix), and a ready-to-run `gcloud run deploy` command.
 
 ---
 
@@ -103,7 +103,7 @@ Use the filter buttons to focus on a verdict tier. Use the search box to find a 
 
 ## Checks performed
 
-### Pillar 1 — Workload
+### Pillar 1  Workload
 
 | Check | Kind | Why it matters |
 |---|---|---|
@@ -132,7 +132,7 @@ Use the filter buttons to focus on a verdict tier. Use the search box to find a 
 | Secret env var reference | Positive | Maps cleanly to --set-secrets / Secret Manager |
 | HPA present | Positive | Maps to --min-instances / --max-instances |
 
-### Pillar 2 — Traffic
+### Pillar 2  Traffic
 
 | Check | Kind | Why it matters |
 |---|---|---|
@@ -149,7 +149,7 @@ Use the filter buttons to focus on a verdict tier. Use the search box to find a 
 | Pub/Sub usage | Positive | Maps naturally to Cloud Run push subscription |
 | HPA min/max replicas | Positive | Maps to --min-instances / --max-instances |
 
-### Pillar 3 — Network and security
+### Pillar 3  Network and security
 
 | Check | Kind | Why it matters |
 |---|---|---|
