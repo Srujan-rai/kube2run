@@ -59,6 +59,7 @@ class DeploymentData:
     annotations: dict
     labels: dict
     host_network: bool = False
+    termination_grace_period_seconds: int = 30
 
 
 @dataclass
@@ -176,6 +177,12 @@ def _parse_container(c) -> ContainerSpec:
             elif e.value_from.secret_key_ref:
                 entry["from"] = "secret"
                 entry["ref"] = e.value_from.secret_key_ref.name
+            elif e.value_from.field_ref:
+                entry["from"] = "fieldRef"
+                entry["ref"] = e.value_from.field_ref.field_path
+            elif e.value_from.resource_field_ref:
+                entry["from"] = "resourceFieldRef"
+                entry["ref"] = e.value_from.resource_field_ref.resource
         env.append(entry)
     volume_mounts = [{"name": vm.name, "mount_path": vm.mount_path}
                      for vm in (c.volume_mounts or [])]
@@ -316,6 +323,7 @@ def collect(namespace: str = "default", context: Optional[str] = None) -> Cluste
             annotations=d.metadata.annotations or {},
             labels=d.metadata.labels or {},
             host_network=bool(spec.host_network),
+            termination_grace_period_seconds=spec.termination_grace_period_seconds or 30,
         ))
 
     services = []

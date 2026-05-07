@@ -78,7 +78,7 @@
 <body>
 <div class="header">
   <h1>Cloud Run Readiness Report</h1>
-  <div class="meta">Cluster: <strong>GKE</strong> &nbsp;|&nbsp; Namespace: <strong>default</strong> &nbsp;|&nbsp; Generated: 2026-05-07 16:25 UTC &nbsp;|&nbsp; 5 services analyzed</div>
+  <div class="meta">Cluster: <strong>GKE</strong> &nbsp;|&nbsp; Namespace: <strong>default</strong> &nbsp;|&nbsp; Generated: 2026-05-07 16:44 UTC &nbsp;|&nbsp; 5 services analyzed</div>
 </div>
 <div class="container">
   <div class="summary-grid">
@@ -87,7 +87,7 @@
     <div class="card mostly"><div class="num">2</div><div class="label">Mostly Ready</div></div>
     <div class="card needs"><div class="num">0</div><div class="label">Needs Work</div></div>
     <div class="card notready"><div class="num">2</div><div class="label">Not Ready</div></div>
-    <div class="card"><div class="num">55</div><div class="label">Avg Score</div></div>
+    <div class="card"><div class="num">51</div><div class="label">Avg Score</div></div>
   </div>
   <div class="toolbar">
     <button class="filter-btn active" data-filter="all">All</button>
@@ -107,7 +107,7 @@
       </div>
       <div class="meta-badges">
         <span class="meta-badge">ns: default</span>
-        <span class="meta-badge">2 replicas</span>
+        <span class="meta-badge">1 replica</span>
         <span class="meta-badge">mem: 256Mi</span>
         <span class="meta-badge">cpu: 500m</span>
       </div>
@@ -204,8 +204,8 @@
       </div>
       <span class="badge mostly">MOSTLY READY</span>
       <div class="score-bar-wrap">
-        <div class="score-label">Score: 76/100</div>
-        <div class="score-bar"><div class="score-fill fill-mostly" style="width:76%"></div></div>
+        <div class="score-label">Score: 68/100</div>
+        <div class="score-bar"><div class="score-fill fill-mostly" style="width:68%"></div></div>
       </div>
       <span class="arrow" id="arrow-2">▼</span>
     </div>
@@ -214,10 +214,16 @@
       
       <div class="section">
         <div class="section-header warning-header" onclick="toggleSection(this)">
-          <span class="dot dot-yellow"></span> Warnings <span class="count">3</span>
+          <span class="dot dot-yellow"></span> Warnings <span class="count">4</span>
           <span class="arrow">▼</span>
         </div>
         <div class="section-content">
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>No HPA — static replica count</div>
+            <div class="check-detail">Deployment has 2 static replicas with no autoscaling.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run auto-scales by default. Set --min-instances and --max-instances instead of managing replicas manually.</div>
+          </div>
           
           <div class="check-item">
             <div class="check-title"><span class="dot dot-yellow"></span>gRPC usage detected</div>
@@ -275,8 +281,8 @@
       </div>
       <span class="badge notready">NOT READY</span>
       <div class="score-bar-wrap">
-        <div class="score-label">Score: 2/100</div>
-        <div class="score-bar"><div class="score-fill fill-notready" style="width:2%"></div></div>
+        <div class="score-label">Score: 0/100</div>
+        <div class="score-bar"><div class="score-fill fill-notready" style="width:0%"></div></div>
       </div>
       <span class="arrow" id="arrow-3">▼</span>
     </div>
@@ -307,7 +313,7 @@
       
       <div class="section">
         <div class="section-header warning-header" onclick="toggleSection(this)">
-          <span class="dot dot-yellow"></span> Warnings <span class="count">6</span>
+          <span class="dot dot-yellow"></span> Warnings <span class="count">7</span>
           <span class="arrow">▼</span>
         </div>
         <div class="section-content">
@@ -328,6 +334,12 @@
             <div class="check-title"><span class="dot dot-yellow"></span>No liveness or readiness probes defined</div>
             <div class="check-detail">Container 'legacy' has no health probes.</div>
             <div class="check-fix warning-fix">Fix: Add a startup probe or configure Cloud Run health checks via --startup-cpu-boost. Cloud Run needs a signal that the container is ready.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>No HPA — static replica count</div>
+            <div class="check-detail">Deployment has 3 static replicas with no autoscaling.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run auto-scales by default. Set --min-instances and --max-instances instead of managing replicas manually.</div>
           </div>
           
           <div class="check-item">
@@ -386,8 +398,8 @@
       </div>
       <span class="badge notready">NOT READY</span>
       <div class="score-bar-wrap">
-        <div class="score-label">Score: 28/100</div>
-        <div class="score-bar"><div class="score-fill fill-notready" style="width:28%"></div></div>
+        <div class="score-label">Score: 20/100</div>
+        <div class="score-bar"><div class="score-fill fill-notready" style="width:20%"></div></div>
       </div>
       <span class="arrow" id="arrow-4">▼</span>
     </div>
@@ -396,7 +408,7 @@
       
       <div class="section">
         <div class="section-header warning-header" onclick="toggleSection(this)">
-          <span class="dot dot-yellow"></span> Warnings <span class="count">9</span>
+          <span class="dot dot-yellow"></span> Warnings <span class="count">10</span>
           <span class="arrow">▼</span>
         </div>
         <div class="section-content">
@@ -423,6 +435,12 @@
             <div class="check-title"><span class="dot dot-yellow"></span>High static replica count</div>
             <div class="check-detail">Deployment has 12 replicas configured statically.</div>
             <div class="check-fix warning-fix">Fix: Cloud Run auto-scales. Set --min-instances for baseline capacity and remove static replica tuning.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>No HPA — static replica count</div>
+            <div class="check-detail">Deployment has 12 static replicas with no autoscaling.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run auto-scales by default. Set --min-instances and --max-instances instead of managing replicas manually.</div>
           </div>
           
           <div class="check-item">

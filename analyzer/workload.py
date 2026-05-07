@@ -210,6 +210,60 @@ def analyze(deployment, hpa=None) -> list:
             kind="blocker",
         ))
 
+    tgp = getattr(deployment, "termination_grace_period_seconds", 30)
+    if tgp > 300:
+        checks.append(Check(
+            id="termination_grace_period_long",
+            title="Termination grace period exceeds Cloud Run maximum",
+            detail=f"terminationGracePeriodSeconds is {tgp}s. Cloud Run max is 300s.",
+            fix="Reduce terminationGracePeriodSeconds to ≤300. Cloud Run sends SIGTERM and waits up to 300s before force-killing.",
+            kind="warning",
+        ))
+
+    for c in containers:
+        for e in c.env:
+            if e.get("from") in ("fieldRef", "resourceFieldRef"):
+                checks.append(Check(
+                    id="downward_api_env_var",
+                    title="Downward API environment variable detected",
+                    detail=f"Container '{c.name}' uses '{e['name']}' sourced from {e['from']} ('{e.get('ref', '')}').",
+                    fix="Cloud Run does not support Kubernetes Downward API. Replace with static env vars or use the metadata server (metadata.google.internal) for project/region info.",
+                    kind="warning",
+                ))
+            break
+
+    all_env_count = sum(len(c.env) for c in containers)
+    if all_env_count > 50:
+        checks.append(Check(
+            id="large_env_var_count",
+            title="High environment variable count",
+            detail=f"{all_env_count} env vars across containers. Cloud Run has a 32 KiB total env var size limit.",
+            fix="Consolidate config into fewer env vars, use Secret Manager for sensitive values, or load config from GCS at startup.",
+            kind="warning",
+        ))
+
+    if not hpa:
+        if deployment.replicas > 1:
+            checks.append(Check(
+                id="no_hpa",
+                title="No HPA — static replica count",
+                detail=f"Deployment has {deployment.replicas} static replicas with no autoscaling.",
+                fix="Cloud Run auto-scales by default. Set --min-instances and --max-instances instead of managing replicas manually.",
+                kind="warning",
+            ))
+
+    for c in containers:
+        image = c.image or ""
+        tag = image.split(":")[-1] if ":" in image else "latest"
+        if tag in ("latest", "") or not tag:
+            checks.append(Check(
+                id="latest_image_tag",
+                title="Image uses :latest or untagged",
+                detail=f"Container '{c.name}' image '{image}' is not pinned to a specific digest or version tag.",
+                fix="Pin to a specific tag or digest (e.g. image@sha256:...). Cloud Run caches images — :latest may not pull the newest version on redeploy without --no-traffic.",
+                kind="warning",
+            ))
+
     return checks
 
 

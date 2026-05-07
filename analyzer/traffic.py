@@ -38,7 +38,15 @@ def analyze(deployment, service=None, hpa=None) -> list:
             protocol = port.get("protocol", "TCP")
             port_num = port.get("port")
             app_protocol = port.get("app_protocol")
-            if protocol == "TCP" and port_num not in (80, 443, 8080) and app_protocol not in ("http", "http2", "grpc"):
+            if protocol == "UDP":
+                checks.append(Check(
+                    id="udp_protocol",
+                    title="UDP protocol detected",
+                    detail=f"Service port {port_num} uses UDP.",
+                    fix="Cloud Run does not support UDP. This service cannot run on Cloud Run without significant protocol changes (e.g. migrate to HTTP/WebSocket).",
+                    kind="blocker",
+                ))
+            elif protocol == "TCP" and port_num not in (80, 443, 8080) and app_protocol not in ("http", "http2", "grpc"):
                 checks.append(Check(
                     id="tcp_non_http_port",
                     title="TCP service on non-HTTP port",
@@ -86,6 +94,17 @@ def analyze(deployment, service=None, hpa=None) -> list:
                 detail=f"Container '{c.name}' uses Pub/Sub environment variables.",
                 fix=None,
                 kind="positive",
+            ))
+
+        websocket_hints = any("WEBSOCKET" in n or "WS_" in n for n in env_names) or \
+                          "websocket" in name_lower or "ws-" in name_lower
+        if websocket_hints:
+            checks.append(Check(
+                id="websocket_detected",
+                title="WebSocket usage detected",
+                detail=f"Container '{c.name}' shows signs of WebSocket usage.",
+                fix="WebSocket is supported on Cloud Run with HTTP/1.1 (do NOT use --use-http2). Set --session-affinity is not available — ensure connections can reconnect to any instance.",
+                kind="info",
             ))
 
     if hpa:

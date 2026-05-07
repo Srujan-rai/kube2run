@@ -95,4 +95,51 @@ def analyze(deployment, network_policies=None, service_account=None, secrets=Non
                     kind="warning",
                 ))
 
+    labels = deployment.labels or {}
+    annotations = deployment.annotations or {}
+    all_label_keys = " ".join(labels.keys()).lower()
+    all_annotation_keys = " ".join(annotations.keys()).lower()
+
+    istio_hints = (
+        "istio" in all_label_keys or
+        "istio" in all_annotation_keys or
+        "sidecar.istio.io" in all_annotation_keys or
+        "linkerd.io" in all_annotation_keys or
+        any(c.name in ("istio-proxy", "linkerd-proxy") for c in deployment.containers)
+    )
+    if istio_hints:
+        checks.append(Check(
+            id="service_mesh_detected",
+            title="Service mesh (Istio/Linkerd) detected",
+            detail="Deployment has Istio or Linkerd annotations/labels or sidecar containers.",
+            fix="Cloud Run does not support Istio or Linkerd. Remove mesh annotations. Replace mTLS with Cloud Run built-in TLS and IAM-based service-to-service auth.",
+            kind="blocker",
+        ))
+
+    eso_hints = (
+        "externalsecrets.io" in all_annotation_keys or
+        "external-secrets.io" in all_annotation_keys
+    )
+    if eso_hints:
+        checks.append(Check(
+            id="external_secrets_operator",
+            title="External Secrets Operator detected — maps to Secret Manager",
+            detail="Deployment uses External Secrets Operator annotations.",
+            fix=None,
+            kind="positive",
+        ))
+
+    cert_manager_hints = (
+        "cert-manager.io" in all_annotation_keys or
+        "certmanager.k8s.io" in all_annotation_keys
+    )
+    if cert_manager_hints:
+        checks.append(Check(
+            id="cert_manager_annotation",
+            title="cert-manager annotation detected",
+            detail="Deployment references cert-manager for TLS certificate management.",
+            fix="Migrate to Google Certificate Manager or use Cloud Run's automatic managed TLS for *.run.app domains. No cert-manager equivalent exists in Cloud Run.",
+            kind="warning",
+        ))
+
     return checks
