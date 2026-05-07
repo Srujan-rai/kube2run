@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud Run Readiness Report — GKE / default</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; color: #1a202c; font-size: 14px; }
+  .header { background: #1a202c; color: #fff; padding: 24px 32px; }
+  .header h1 { font-size: 22px; font-weight: 700; }
+  .header .meta { margin-top: 6px; color: #a0aec0; font-size: 12px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .card { background: #fff; border-radius: 8px; padding: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .card .num { font-size: 32px; font-weight: 700; }
+  .card .label { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
+  .card.ready .num { color: #276749; }
+  .card.mostly .num { color: #2c7a7b; }
+  .card.needs .num { color: #b7791f; }
+  .card.notready .num { color: #c53030; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; align-items: center; }
+  .filter-btn { border: 1px solid #e2e8f0; background: #fff; padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all .15s; }
+  .filter-btn:hover, .filter-btn.active { background: #2d3748; color: #fff; border-color: #2d3748; }
+  .search { margin-left: auto; border: 1px solid #e2e8f0; padding: 6px 12px; border-radius: 6px; width: 220px; font-size: 13px; }
+  .service-card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 16px; overflow: hidden; }
+  .service-header { padding: 16px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; cursor: pointer; }
+  .service-name { font-size: 16px; font-weight: 700; flex: 1; min-width: 160px; }
+  .service-image { font-size: 11px; color: #718096; font-family: monospace; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge.ready { background: #c6f6d5; color: #276749; }
+  .badge.mostly { background: #b2f5ea; color: #234e52; }
+  .badge.needs { background: #fefcbf; color: #744210; }
+  .badge.notready { background: #fed7d7; color: #742a2a; }
+  .score-bar-wrap { width: 120px; }
+  .score-label { font-size: 11px; color: #718096; }
+  .score-bar { height: 6px; background: #e2e8f0; border-radius: 3px; margin-top: 4px; }
+  .score-fill { height: 100%; border-radius: 3px; }
+  .fill-ready { background: #48bb78; }
+  .fill-mostly { background: #38b2ac; }
+  .fill-needs { background: #ecc94b; }
+  .fill-notready { background: #fc8181; }
+  .meta-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .meta-badge { background: #edf2f7; border-radius: 4px; padding: 2px 8px; font-size: 11px; color: #4a5568; }
+  .service-body { border-top: 1px solid #e2e8f0; padding: 0 20px; }
+  .section { border-bottom: 1px solid #f7fafc; }
+  .section-header { padding: 12px 0; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .section-header .count { background: #e2e8f0; border-radius: 10px; padding: 1px 8px; font-size: 11px; }
+  .section-header.blocker-header .count { background: #fed7d7; color: #742a2a; }
+  .section-header.warning-header .count { background: #fefcbf; color: #744210; }
+  .section-header.pass-header .count { background: #c6f6d5; color: #276749; }
+  .section-content { padding: 0 0 12px 0; display: none; }
+  .section-content.open { display: block; }
+  .check-item { padding: 8px 0; border-bottom: 1px solid #f7fafc; }
+  .check-item:last-child { border-bottom: none; }
+  .check-title { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .check-detail { color: #718096; font-size: 12px; margin-top: 3px; }
+  .check-fix { background: #f0fff4; border-left: 3px solid #48bb78; padding: 6px 10px; margin-top: 6px; font-size: 12px; color: #276749; border-radius: 0 4px 4px 0; }
+  .check-fix.blocker-fix { background: #fff5f5; border-left-color: #fc8181; color: #742a2a; }
+  .check-fix.warning-fix { background: #fffff0; border-left-color: #f6e05e; color: #744210; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .dot-red { background: #fc8181; }
+  .dot-yellow { background: #f6e05e; }
+  .dot-green { background: #68d391; }
+  .gcloud-section { padding: 16px 0; }
+  .gcloud-label { font-size: 11px; font-weight: 600; color: #718096; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+  .gcloud-cmd { background: #1a202c; color: #a0ec8b; padding: 14px 16px; border-radius: 6px; font-family: monospace; font-size: 12px; white-space: pre; overflow-x: auto; }
+  .arrow { margin-left: auto; font-size: 12px; color: #a0aec0; transition: transform .2s; }
+  .arrow.open { transform: rotate(180deg); }
+  @media print {
+    body { background: #fff; }
+    .toolbar, .search { display: none; }
+    .service-body { display: block !important; }
+    .section-content { display: block !important; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Cloud Run Readiness Report</h1>
+  <div class="meta">Cluster: <strong>GKE</strong> &nbsp;|&nbsp; Namespace: <strong>default</strong> &nbsp;|&nbsp; Generated: 2026-05-07 16:25 UTC &nbsp;|&nbsp; 5 services analyzed</div>
+</div>
+<div class="container">
+  <div class="summary-grid">
+    <div class="card"><div class="num">5</div><div class="label">Total</div></div>
+    <div class="card ready"><div class="num">1</div><div class="label">Ready</div></div>
+    <div class="card mostly"><div class="num">2</div><div class="label">Mostly Ready</div></div>
+    <div class="card needs"><div class="num">0</div><div class="label">Needs Work</div></div>
+    <div class="card notready"><div class="num">2</div><div class="label">Not Ready</div></div>
+    <div class="card"><div class="num">55</div><div class="label">Avg Score</div></div>
+  </div>
+  <div class="toolbar">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="READY">Ready</button>
+    <button class="filter-btn" data-filter="MOSTLY READY">Mostly Ready</button>
+    <button class="filter-btn" data-filter="NEEDS WORK">Needs Work</button>
+    <button class="filter-btn" data-filter="NOT READY">Not Ready</button>
+    <input class="search" type="text" placeholder="Filter by service name…" id="searchInput">
+  </div>
+  
+  
+  <div class="service-card" data-verdict="MOSTLY READY" data-name="api-service">
+    <div class="service-header" onclick="toggleCard(this)">
+      <div>
+        <div class="service-name">api-service</div>
+        <div class="service-image">nginx:1.25-alpine</div>
+      </div>
+      <div class="meta-badges">
+        <span class="meta-badge">ns: default</span>
+        <span class="meta-badge">2 replicas</span>
+        <span class="meta-badge">mem: 256Mi</span>
+        <span class="meta-badge">cpu: 500m</span>
+      </div>
+      <span class="badge mostly">MOSTLY READY</span>
+      <div class="score-bar-wrap">
+        <div class="score-label">Score: 76/100</div>
+        <div class="score-bar"><div class="score-fill fill-mostly" style="width:76%"></div></div>
+      </div>
+      <span class="arrow" id="arrow-1">▼</span>
+    </div>
+    <div class="service-body" style="display:none" id="body-1">
+      
+      
+      <div class="section">
+        <div class="section-header warning-header" onclick="toggleSection(this)">
+          <span class="dot dot-yellow"></span> Warnings <span class="count">3</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="section-content">
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>Prometheus scrape annotation present</div>
+            <div class="check-detail">Deployment is annotated for Prometheus scraping (prometheus.io/scrape: 'true').</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run doesn't support Prometheus scraping natively. Use Cloud Monitoring with --set-env-vars or OpenTelemetry sidecar.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>HPA scales on CPU metric</div>
+            <div class="check-detail">HPA 'api-service' uses CPU-based scaling.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run scales on request concurrency, not CPU. Set --concurrency appropriately. CPU-based HPA metrics don't map directly.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>NetworkPolicy restricts egress to specific CIDR</div>
+            <div class="check-detail">NetworkPolicy 'grpc-service-egress' allows egress to 10.0.0.0/8.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run needs a Serverless VPC Connector to reach private CIDRs. Add --vpc-connector and --vpc-egress all-traffic or private-ranges-only.</div>
+          </div>
+          
+        </div>
+      </div>
+      
+      
+      <div class="section">
+        <div class="section-header pass-header" onclick="toggleSection(this)">
+          <span class="dot dot-green"></span> Passed <span class="count">2</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="section-content">
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-green"></span>HPA defined — auto-scaling ready</div>
+            <div class="check-detail">HPA 'api-service' scales 1–10 replicas.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-green"></span>HPA min/max: 1–10 replicas</div>
+            <div class="check-detail">Maps to Cloud Run --min-instances 1 --max-instances 10.</div>
+          </div>
+          
+        </div>
+      </div>
+      
+      <div class="gcloud-section">
+        <div class="gcloud-label">gcloud run deploy command</div>
+        <pre class="gcloud-cmd">gcloud run deploy api-service \
+  --image nginx:1.25-alpine \
+  --region us-central1 \
+  --min-instances 1 \
+  --max-instances 10 \
+  --concurrency 80 \
+  --memory 256Mi \
+  --cpu 500m \
+  --ingress all \
+  --vpc-connector us-central1-vpc-connector \
+  --service-account api-service-sa@YOUR_PROJECT.iam.gserviceaccount.com \
+  --set-env-vars APP_ENV=production \
+  --port 80</pre>
+      </div>
+    </div>
+  </div>
+  
+  
+  <div class="service-card" data-verdict="MOSTLY READY" data-name="grpc-service">
+    <div class="service-header" onclick="toggleCard(this)">
+      <div>
+        <div class="service-name">grpc-service</div>
+        <div class="service-image">nginx:1.25-alpine</div>
+      </div>
+      <div class="meta-badges">
+        <span class="meta-badge">ns: default</span>
+        <span class="meta-badge">2 replicas</span>
+        <span class="meta-badge">mem: 512Mi</span>
+        <span class="meta-badge">cpu: 1</span>
+      </div>
+      <span class="badge mostly">MOSTLY READY</span>
+      <div class="score-bar-wrap">
+        <div class="score-label">Score: 76/100</div>
+        <div class="score-bar"><div class="score-fill fill-mostly" style="width:76%"></div></div>
+      </div>
+      <span class="arrow" id="arrow-2">▼</span>
+    </div>
+    <div class="service-body" style="display:none" id="body-2">
+      
+      
+      <div class="section">
+        <div class="section-header warning-header" onclick="toggleSection(this)">
+          <span class="dot dot-yellow"></span> Warnings <span class="count">3</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="section-content">
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>gRPC usage detected</div>
+            <div class="check-detail">Container 'grpc' shows signs of gRPC usage.</div>
+            <div class="check-fix warning-fix">Fix: Enable HTTP/2 in Cloud Run with --use-http2. gRPC is fully supported on Cloud Run with HTTP/2 end-to-end.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>NetworkPolicy restricts egress to specific CIDR</div>
+            <div class="check-detail">NetworkPolicy 'grpc-service-egress' allows egress to 10.0.0.0/8.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run needs a Serverless VPC Connector to reach private CIDRs. Add --vpc-connector and --vpc-egress all-traffic or private-ranges-only.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>Cluster-internal hostname in environment variable</div>
+            <div class="check-detail">Env var 'AUTH_SERVICE' references 'auth.default.svc.cluster.local:50051' — a cluster-internal DNS name.</div>
+            <div class="check-fix warning-fix">Fix: Replace with Cloud Run service URL or internal Load Balancer URL. Add --vpc-connector if the dependency is in a private VPC.</div>
+          </div>
+          
+        </div>
+      </div>
+      
+      
+      <div class="gcloud-section">
+        <div class="gcloud-label">gcloud run deploy command</div>
+        <pre class="gcloud-cmd">gcloud run deploy grpc-service \
+  --image nginx:1.25-alpine \
+  --region us-central1 \
+  --min-instances 0 \
+  --max-instances 10 \
+  --concurrency 80 \
+  --memory 512Mi \
+  --cpu 1 \
+  --ingress all \
+  --vpc-connector us-central1-vpc-connector \
+  --service-account grpc-service-sa@YOUR_PROJECT.iam.gserviceaccount.com \
+  --set-env-vars GRPC_PORT=8080,AUTH_SERVICE=auth.default.svc.cluster.local:50051,DB_HOST=10.0.1.5 \
+  --port 8080</pre>
+      </div>
+    </div>
+  </div>
+  
+  
+  <div class="service-card" data-verdict="NOT READY" data-name="legacy-app">
+    <div class="service-header" onclick="toggleCard(this)">
+      <div>
+        <div class="service-name">legacy-app</div>
+        <div class="service-image">nginx:1.25-alpine</div>
+      </div>
+      <div class="meta-badges">
+        <span class="meta-badge">ns: default</span>
+        <span class="meta-badge">3 replicas</span>
+        <span class="meta-badge">mem: 512Mi</span>
+        <span class="meta-badge">cpu: 1</span>
+      </div>
+      <span class="badge notready">NOT READY</span>
+      <div class="score-bar-wrap">
+        <div class="score-label">Score: 2/100</div>
+        <div class="score-bar"><div class="score-fill fill-notready" style="width:2%"></div></div>
+      </div>
+      <span class="arrow" id="arrow-3">▼</span>
+    </div>
+    <div class="service-body" style="display:none" id="body-3">
+      
+      <div class="section">
+        <div class="section-header blocker-header" onclick="toggleSection(this)">
+          <span class="dot dot-red"></span> Blockers <span class="count">2</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="section-content">
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-red"></span>PersistentVolumeClaim volume detected</div>
+            <div class="check-detail">Volume 'data' references PVC 'legacy-data'.</div>
+            <div class="check-fix blocker-fix">Fix: Migrate stateful storage to Cloud Storage (GCS), Cloud SQL, or Firestore. Cloud Run is stateless and cannot mount PVCs.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-red"></span>Session affinity (ClientIP) detected</div>
+            <div class="check-detail">Service 'legacy-app' uses ClientIP session affinity.</div>
+            <div class="check-fix blocker-fix">Fix: Cloud Run does not support session affinity. Refactor to stateless request handling. Store session state in Memorystore (Redis) or Firestore.</div>
+          </div>
+          
+        </div>
+      </div>
+      
+      
+      <div class="section">
+        <div class="section-header warning-header" onclick="toggleSection(this)">
+          <span class="dot dot-yellow"></span> Warnings <span class="count">6</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="section-content">
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>No resource limits defined</div>
+            <div class="check-detail">Container 'legacy' has no CPU or memory limits.</div>
+            <div class="check-fix warning-fix">Fix: Set --memory and --cpu flags on gcloud run deploy. Cloud Run requires explicit resource allocation.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>Non-standard container port</div>
+            <div class="check-detail">Container 'legacy' listens on port 9090.</div>
+            <div class="check-fix warning-fix">Fix: Specify --port 9090 in gcloud run deploy. Cloud Run defaults to 8080.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>No liveness or readiness probes defined</div>
+            <div class="check-detail">Container 'legacy' has no health probes.</div>
+            <div class="check-fix warning-fix">Fix: Add a startup probe or configure Cloud Run health checks via --startup-cpu-boost. Cloud Run needs a signal that the container is ready.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>TCP service on non-HTTP port</div>
+            <div class="check-detail">Service port 9090 uses TCP without explicit HTTP app protocol.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run only supports HTTP/1.1, HTTP/2, and WebSocket. Verify the service speaks HTTP. Set appProtocol: http or appProtocol: grpc.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>NetworkPolicy restricts egress to specific CIDR</div>
+            <div class="check-detail">NetworkPolicy 'grpc-service-egress' allows egress to 10.0.0.0/8.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run needs a Serverless VPC Connector to reach private CIDRs. Add --vpc-connector and --vpc-egress all-traffic or private-ranges-only.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>Cluster-internal hostname in environment variable</div>
+            <div class="check-detail">Env var 'DB_HOST' references 'postgres.default.svc.cluster.local' — a cluster-internal DNS name.</div>
+            <div class="check-fix warning-fix">Fix: Replace with Cloud Run service URL or internal Load Balancer URL. Add --vpc-connector if the dependency is in a private VPC.</div>
+          </div>
+          
+        </div>
+      </div>
+      
+      
+      <div class="gcloud-section">
+        <div class="gcloud-label">gcloud run deploy command</div>
+        <pre class="gcloud-cmd">gcloud run deploy legacy-app \
+  --image nginx:1.25-alpine \
+  --region us-central1 \
+  --min-instances 0 \
+  --max-instances 10 \
+  --concurrency 80 \
+  --memory 512Mi \
+  --cpu 1 \
+  --ingress all \
+  --vpc-connector us-central1-vpc-connector \
+  --service-account legacy-app-sa@YOUR_PROJECT.iam.gserviceaccount.com \
+  --set-env-vars CONFIG_PATH=/var/data/config.json,DB_HOST=postgres.default.svc.cluster.local \
+  --port 9090</pre>
+      </div>
+    </div>
+  </div>
+  
+  
+  <div class="service-card" data-verdict="NOT READY" data-name="stateful-cache">
+    <div class="service-header" onclick="toggleCard(this)">
+      <div>
+        <div class="service-name">stateful-cache</div>
+        <div class="service-image">redis:7-alpine</div>
+      </div>
+      <div class="meta-badges">
+        <span class="meta-badge">ns: default</span>
+        <span class="meta-badge">12 replicas</span>
+        <span class="meta-badge">mem: 1Gi</span>
+        <span class="meta-badge">cpu: 2</span>
+      </div>
+      <span class="badge notready">NOT READY</span>
+      <div class="score-bar-wrap">
+        <div class="score-label">Score: 28/100</div>
+        <div class="score-bar"><div class="score-fill fill-notready" style="width:28%"></div></div>
+      </div>
+      <span class="arrow" id="arrow-4">▼</span>
+    </div>
+    <div class="service-body" style="display:none" id="body-4">
+      
+      
+      <div class="section">
+        <div class="section-header warning-header" onclick="toggleSection(this)">
+          <span class="dot dot-yellow"></span> Warnings <span class="count">9</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="section-content">
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>emptyDir volume detected</div>
+            <div class="check-detail">Volume 'cache-data' uses emptyDir — ephemeral in-memory or disk storage.</div>
+            <div class="check-fix warning-fix">Fix: emptyDir data is lost on container restart. Cloud Run supports in-memory /tmp up to 32 GiB. Verify no cross-request state is stored here.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>Non-standard container port</div>
+            <div class="check-detail">Container 'cache' listens on port 6379.</div>
+            <div class="check-fix warning-fix">Fix: Specify --port 6379 in gcloud run deploy. Cloud Run defaults to 8080.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>No liveness or readiness probes defined</div>
+            <div class="check-detail">Container 'cache' has no health probes.</div>
+            <div class="check-fix warning-fix">Fix: Add a startup probe or configure Cloud Run health checks via --startup-cpu-boost. Cloud Run needs a signal that the container is ready.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>High static replica count</div>
+            <div class="check-detail">Deployment has 12 replicas configured statically.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run auto-scales. Set --min-instances for baseline capacity and remove static replica tuning.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>TCP service on non-HTTP port</div>
+            <div class="check-detail">Service port 6379 uses TCP without explicit HTTP app protocol.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run only supports HTTP/1.1, HTTP/2, and WebSocket. Verify the service speaks HTTP. Set appProtocol: http or appProtocol: grpc.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>Kafka consumer pattern detected</div>
+            <div class="check-detail">Container 'cache' has Kafka-related environment variables.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run is HTTP-triggered. Replace Kafka consumer with Cloud Pub/Sub push subscription or Eventarc trigger. Kafka → Pub/Sub migration may require an application change.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>NetworkPolicy restricts egress to specific CIDR</div>
+            <div class="check-detail">NetworkPolicy 'grpc-service-egress' allows egress to 10.0.0.0/8.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run needs a Serverless VPC Connector to reach private CIDRs. Add --vpc-connector and --vpc-egress all-traffic or private-ranges-only.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>Cluster-internal hostname in environment variable</div>
+            <div class="check-detail">Env var 'KAFKA_BOOTSTRAP_SERVERS' references 'kafka.default.svc.cluster.local:9092' — a cluster-internal DNS name.</div>
+            <div class="check-fix warning-fix">Fix: Replace with Cloud Run service URL or internal Load Balancer URL. Add --vpc-connector if the dependency is in a private VPC.</div>
+          </div>
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>Cluster-internal hostname in environment variable</div>
+            <div class="check-detail">Env var 'REDIS_HOST' references 'redis.default.svc.cluster.local' — a cluster-internal DNS name.</div>
+            <div class="check-fix warning-fix">Fix: Replace with Cloud Run service URL or internal Load Balancer URL. Add --vpc-connector if the dependency is in a private VPC.</div>
+          </div>
+          
+        </div>
+      </div>
+      
+      
+      <div class="gcloud-section">
+        <div class="gcloud-label">gcloud run deploy command</div>
+        <pre class="gcloud-cmd">gcloud run deploy stateful-cache \
+  --image redis:7-alpine \
+  --region us-central1 \
+  --min-instances 0 \
+  --max-instances 10 \
+  --concurrency 80 \
+  --memory 1Gi \
+  --cpu 2 \
+  --ingress all \
+  --vpc-connector us-central1-vpc-connector \
+  --service-account stateful-cache-sa@YOUR_PROJECT.iam.gserviceaccount.com \
+  --set-env-vars KAFKA_BOOTSTRAP_SERVERS=kafka.default.svc.cluster.local:9092,KAFKA_TOPIC=cache-invalidation,REDIS_HOST=redis.default.svc.cluster.local \
+  --port 6379</pre>
+      </div>
+    </div>
+  </div>
+  
+  
+  <div class="service-card" data-verdict="READY" data-name="worker-service">
+    <div class="service-header" onclick="toggleCard(this)">
+      <div>
+        <div class="service-name">worker-service</div>
+        <div class="service-image">python:3.12-slim</div>
+      </div>
+      <div class="meta-badges">
+        <span class="meta-badge">ns: default</span>
+        <span class="meta-badge">1 replica</span>
+        <span class="meta-badge">mem: 512Mi</span>
+        <span class="meta-badge">cpu: 1</span>
+      </div>
+      <span class="badge ready">READY</span>
+      <div class="score-bar-wrap">
+        <div class="score-label">Score: 92/100</div>
+        <div class="score-bar"><div class="score-fill fill-ready" style="width:92%"></div></div>
+      </div>
+      <span class="arrow" id="arrow-5">▼</span>
+    </div>
+    <div class="service-body" style="display:none" id="body-5">
+      
+      
+      <div class="section">
+        <div class="section-header warning-header" onclick="toggleSection(this)">
+          <span class="dot dot-yellow"></span> Warnings <span class="count">1</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="section-content">
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-yellow"></span>NetworkPolicy restricts egress to specific CIDR</div>
+            <div class="check-detail">NetworkPolicy 'grpc-service-egress' allows egress to 10.0.0.0/8.</div>
+            <div class="check-fix warning-fix">Fix: Cloud Run needs a Serverless VPC Connector to reach private CIDRs. Add --vpc-connector and --vpc-egress all-traffic or private-ranges-only.</div>
+          </div>
+          
+        </div>
+      </div>
+      
+      
+      <div class="section">
+        <div class="section-header pass-header" onclick="toggleSection(this)">
+          <span class="dot dot-green"></span> Passed <span class="count">1</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="section-content">
+          
+          <div class="check-item">
+            <div class="check-title"><span class="dot dot-green"></span>Pub/Sub usage detected — event-driven ready</div>
+            <div class="check-detail">Container 'worker' uses Pub/Sub environment variables.</div>
+          </div>
+          
+        </div>
+      </div>
+      
+      <div class="gcloud-section">
+        <div class="gcloud-label">gcloud run deploy command</div>
+        <pre class="gcloud-cmd">gcloud run deploy worker-service \
+  --image python:3.12-slim \
+  --region us-central1 \
+  --min-instances 0 \
+  --max-instances 10 \
+  --concurrency 80 \
+  --memory 512Mi \
+  --cpu 1 \
+  --ingress all \
+  --vpc-connector us-central1-vpc-connector \
+  --service-account worker-service-sa@YOUR_PROJECT.iam.gserviceaccount.com \
+  --set-env-vars PUBSUB_TOPIC=projects/my-project/topics/orders,PUBSUB_SUBSCRIPTION=projects/my-project/subscriptions/orders-sub,APP_PORT=8080 \
+  --port 8080</pre>
+      </div>
+    </div>
+  </div>
+  
+</div>
+<script>
+function toggleCard(header) {
+  const card = header.closest('.service-card');
+  const body = card.querySelector('[id^="body-"]');
+  const arrow = card.querySelector('[id^="arrow-"]');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  arrow.classList.toggle('open', !isOpen);
+}
+function toggleSection(header) {
+  const content = header.nextElementSibling;
+  const arrow = header.querySelector('.arrow');
+  content.classList.toggle('open');
+  if (arrow) arrow.classList.toggle('open', content.classList.contains('open'));
+}
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const f = btn.dataset.filter;
+    document.querySelectorAll('.service-card').forEach(card => {
+      card.style.display = (f === 'all' || card.dataset.verdict === f) ? '' : 'none';
+    });
+  });
+});
+document.getElementById('searchInput').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('.service-card').forEach(card => {
+    card.style.display = card.dataset.name.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+</script>
+</body>
+</html>

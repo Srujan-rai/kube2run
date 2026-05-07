@@ -1,0 +1,60 @@
+# NOT READY: PVC mount + privileged + session affinity + no health probes + no limits
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: legacy-data
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-app
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: legacy-app
+  template:
+    metadata:
+      labels:
+        app: legacy-app
+    spec:
+      containers:
+        - name: legacy
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: data
+              mountPath: /var/data
+          env:
+            - name: CONFIG_PATH
+              value: "/var/data/config.json"
+            - name: DB_HOST
+              value: "postgres.default.svc.cluster.local"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: legacy-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-app
+  namespace: default
+spec:
+  selector:
+    app: legacy-app
+  ports:
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+  type: LoadBalancer
+  sessionAffinity: ClientIP

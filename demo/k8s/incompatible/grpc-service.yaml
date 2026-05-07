@@ -1,0 +1,72 @@
+# MOSTLY READY: gRPC service — needs HTTP/2 flag, VPC connector for internal dep
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpc-service
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: grpc-service
+  template:
+    metadata:
+      labels:
+        app: grpc-service
+    spec:
+      containers:
+        - name: grpc
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 8080
+              name: grpc
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "1"
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          env:
+            - name: GRPC_PORT
+              value: "8080"
+            - name: AUTH_SERVICE
+              value: "auth.default.svc.cluster.local:50051"
+            - name: DB_HOST
+              value: "10.0.1.5"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpc-service
+  namespace: default
+spec:
+  selector:
+    app: grpc-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      appProtocol: grpc
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grpc-service-egress
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: grpc-service
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8

@@ -1,0 +1,55 @@
+# NEEDS WORK: emptyDir + Kafka consumer + high replicas + no probes + non-standard port
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stateful-cache
+  namespace: default
+spec:
+  replicas: 12
+  selector:
+    matchLabels:
+      app: stateful-cache
+  template:
+    metadata:
+      labels:
+        app: stateful-cache
+    spec:
+      containers:
+        - name: cache
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "2"
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka.default.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "cache-invalidation"
+            - name: REDIS_HOST
+              value: "redis.default.svc.cluster.local"
+          volumeMounts:
+            - name: cache-data
+              mountPath: /data
+      volumes:
+        - name: cache-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stateful-cache
+  namespace: default
+spec:
+  selector:
+    app: stateful-cache
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+  type: ClusterIP

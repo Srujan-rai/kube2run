@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kube2run-analyzer
+  namespace: kube-system
+spec:
+  schedule: "0 8 * * 1"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: kube2run-analyzer
+          restartPolicy: OnFailure
+          containers:
+            - name: kube2run
+              image: gcr.io/YOUR_PROJECT/kube2run:latest
+              env:
+                - name: GCS_BUCKET
+                  value: ""  # Required: set your GCS bucket name
+                - name: NAMESPACE
+                  value: "all"
+                - name: REGION
+                  value: "us-central1"
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  python main.py -n ${NAMESPACE} --region ${REGION} -o /tmp/report.html && \
+                  gsutil cp /tmp/report.html gs://${GCS_BUCKET}/kube2run/report-$(date +%Y%m%d).html
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "250m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
