@@ -58,6 +58,7 @@ class DeploymentData:
     service_account: str
     annotations: dict
     labels: dict
+    pod_labels: dict = field(default_factory=dict)  # spec.template.metadata.labels — used for PDB matching
     host_network: bool = False
     termination_grace_period_seconds: int = 30
 
@@ -354,6 +355,7 @@ def collect(namespace: str = "default", context: Optional[str] = None) -> Cluste
             service_account=spec.service_account_name or "default",
             annotations=d.metadata.annotations or {},
             labels=d.metadata.labels or {},
+            pod_labels=d.spec.template.metadata.labels or {} if d.spec.template.metadata else {},
             host_network=bool(spec.host_network),
             termination_grace_period_seconds=spec.termination_grace_period_seconds or 30,
         ))

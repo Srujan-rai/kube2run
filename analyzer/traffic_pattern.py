@@ -128,8 +128,12 @@ def analyze(deployment, hpa=None, ingresses=None, pdbs=None,
 
     # ── PDB zero-downtime signal ──────────────────────────────────────────────
     pdb_zero_downtime = False
+    pod_labels = getattr(deployment, "pod_labels", None) or deployment.labels
     for pdb in pdbs:
         if pdb.namespace != deployment.namespace:
+            continue
+        # PDB selector must be a subset of the deployment's pod template labels
+        if pdb.selector and not all(pod_labels.get(k) == v for k, v in pdb.selector.items()):
             continue
         mu = pdb.max_unavailable
         ma = pdb.min_available
