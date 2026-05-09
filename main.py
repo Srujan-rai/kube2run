@@ -3,7 +3,7 @@ import click
 from datetime import datetime
 
 import k8s_collector as collector
-from analyzer import workload, traffic, network, scorer
+from analyzer import workload, traffic, network, scorer, traffic_pattern
 from report import html_report
 
 
@@ -127,27 +127,58 @@ def _build_mock_data():
 
 def _run_analysis(cluster_data, region="us-central1"):
     results = []
-    hpa_map = {h.scale_target_ref: h for h in cluster_data.hpas}
-    svc_map = {s.name: s for s in cluster_data.services}
-    sa_map = {sa.name: sa for sa in cluster_data.service_accounts}
+
+    # Namespace-aware maps to avoid collisions when --namespace all is used
+    hpa_map = {(h.namespace, h.scale_target_ref): h for h in cluster_data.hpas}
+    svc_map = {(s.namespace, s.name): s for s in cluster_data.services}
+    sa_map = {(sa.namespace, sa.name): sa for sa in cluster_data.service_accounts}
+
     np_by_ns = {}
     for np in cluster_data.network_policies:
         np_by_ns.setdefault(np.namespace, []).append(np)
 
-    for dep in cluster_data.deployments:
-        hpa = hpa_map.get(dep.name)
-        svc = svc_map.get(dep.name)
-        sa = sa_map.get(dep.service_account)
-        nps = np_by_ns.get(dep.namespace, [])
+    ingresses_by_ns = {}
+    for ing in cluster_data.ingresses:
+        ingresses_by_ns.setdefault(ing.namespace, []).append(ing)
 
-        relevant_secrets = [
-            s for s in cluster_data.secrets
-            if s.namespace == dep.namespace
-        ]
+    pdbs_by_ns = {}
+    for pdb in cluster_data.pdbs:
+        pdbs_by_ns.setdefault(pdb.namespace, []).append(pdb)
+
+    secrets_by_ns = {}
+    for s in cluster_data.secrets:
+        secrets_by_ns.setdefault(s.namespace, []).append(s)
+
+    keda_by_ns = {}
+    for kobj in cluster_data.keda_objects:
+        keda_by_ns.setdefault(kobj.namespace, []).append(kobj)
+
+    cronjobs_by_ns = {}
+    for cj in cluster_data.cronjobs:
+        cronjobs_by_ns.setdefault(cj.namespace, []).append(cj)
+
+    for dep in cluster_data.deployments:
+        hpa = hpa_map.get((dep.namespace, dep.name))
+        svc = svc_map.get((dep.namespace, dep.name))
+        sa = sa_map.get((dep.namespace, dep.service_account))
+        nps = np_by_ns.get(dep.namespace, [])
+        dep_ingresses = ingresses_by_ns.get(dep.namespace, [])
+        dep_pdbs = pdbs_by_ns.get(dep.namespace, [])
+        dep_secrets = secrets_by_ns.get(dep.namespace, [])
+        dep_keda = keda_by_ns.get(dep.namespace, [])
+        dep_cronjobs = cronjobs_by_ns.get(dep.namespace, [])
 
         wc = workload.analyze(dep, hpa=hpa)
         tc = traffic.analyze(dep, service=svc, hpa=hpa)
-        nc = network.analyze(dep, network_policies=nps, service_account=sa, secrets=relevant_secrets)
+        nc = network.analyze(dep, network_policies=nps, service_account=sa, secrets=dep_secrets)
+        tp = traffic_pattern.analyze(
+            dep,
+            hpa=hpa,
+            ingresses=dep_ingresses,
+            pdbs=dep_pdbs,
+            keda_objects=dep_keda,
+            cronjobs=dep_cronjobs,
+        )
 
         result = scorer.score_and_build(
             deployment=dep,
@@ -157,6 +188,7 @@ def _run_analysis(cluster_data, region="us-central1"):
             hpa=hpa,
             service=svc,
             region=region,
+            traffic_profile=tp,
         )
         results.append(result)
 

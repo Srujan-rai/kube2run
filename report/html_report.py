@@ -70,6 +70,28 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .gcloud-cmd { background: #1a202c; color: #a0ec8b; padding: 14px 16px; border-radius: 6px; font-family: monospace; font-size: 12px; white-space: pre; overflow-x: auto; }
   .arrow { margin-left: auto; font-size: 12px; color: #a0aec0; transition: transform .2s; }
   .arrow.open { transform: rotate(180deg); }
+  .tp-grid { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0 6px; }
+  .tp-metric { background: #f7fafc; border-radius: 6px; padding: 8px 14px; min-width: 90px; }
+  .tp-label { font-size: 10px; text-transform: uppercase; color: #718096; letter-spacing: .05em; }
+  .tp-value { font-size: 13px; font-weight: 700; margin-top: 3px; color: #2d3748; }
+  .tp-peak { color: #c53030; }
+  .tp-baseline { color: #276749; }
+  .tp-mid { color: #b7791f; }
+  .tp-savings { color: #276749; }
+  .tp-compare { color: #b7791f; }
+  .tp-unknown-cost { color: #718096; }
+  .tp-signals { padding: 4px 0 8px; }
+  .tp-signal { font-size: 12px; color: #4a5568; padding: 2px 0; line-height: 1.5; }
+  .tp-time { background: #ebf8ff; border-left: 3px solid #4299e1; padding: 6px 10px; margin-top: 6px; font-size: 12px; color: #2c5282; border-radius: 0 4px 4px 0; }
+  .pattern-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
+  .p-bursty { background: #bee3f8; color: #2c5282; }
+  .p-steady-high { background: #fed7d7; color: #742a2a; }
+  .p-steady-low { background: #c6f6d5; color: #276749; }
+  .p-moderate { background: #fefcbf; color: #744210; }
+  .p-scales-to-zero { background: #b2f5ea; color: #234e52; }
+  .p-business-hours { background: #e9d8fd; color: #553c9a; }
+  .p-batch { background: #e2e8f0; color: #4a5568; }
+  .p-unknown { background: #e2e8f0; color: #718096; }
   @media print {
     body { background: #fff; }
     .toolbar, .search { display: none; }
@@ -169,6 +191,69 @@ _TEMPLATE = r"""<!DOCTYPE html>
             <div class="check-detail">{{ c.detail }}</div>
           </div>
           {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% if r.traffic_profile %}
+      {% set tp = r.traffic_profile %}
+      {% set pc = tp.pattern_class | lower | replace('_', '-') %}
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          Traffic Profile
+          <span class="pattern-badge p-{{ pc }}">{{ tp.pattern_class }}</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="section-content">
+          <div class="tp-grid">
+            {% if tp.volatility_ratio > 0 %}
+            <div class="tp-metric">
+              <div class="tp-label">Volatility</div>
+              <div class="tp-value">{{ "%.0f"|format(tp.volatility_ratio) }}x</div>
+            </div>
+            {% endif %}
+            <div class="tp-metric">
+              <div class="tp-label">Right Now</div>
+              {% if tp.at_peak_now %}
+              <div class="tp-value tp-peak">AT PEAK</div>
+              {% elif tp.at_baseline_now %}
+              <div class="tp-value tp-baseline">AT BASELINE</div>
+              {% else %}
+              <div class="tp-value tp-mid">{{ tp.current_utilization_pct }}% CAP</div>
+              {% endif %}
+            </div>
+            {% if tp.peak_rps_hint %}
+            <div class="tp-metric">
+              <div class="tp-label">Peak RPS</div>
+              <div class="tp-value">~{{ tp.peak_rps_hint }}</div>
+            </div>
+            {% endif %}
+            <div class="tp-metric">
+              <div class="tp-label">Min Instances</div>
+              <div class="tp-value">{{ tp.recommended_min_instances }}</div>
+            </div>
+            <div class="tp-metric">
+              <div class="tp-label">Max Instances</div>
+              <div class="tp-value">{{ tp.recommended_max_instances }}</div>
+            </div>
+            <div class="tp-metric">
+              <div class="tp-label">Cost Signal</div>
+              {% if tp.cost_signal == 'SAVINGS_LIKELY' %}
+              <div class="tp-value tp-savings">SAVINGS LIKELY</div>
+              {% elif tp.cost_signal == 'COMPARE_CAREFULLY' %}
+              <div class="tp-value tp-compare">COMPARE CAREFULLY</div>
+              {% else %}
+              <div class="tp-value tp-unknown-cost">UNKNOWN</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="tp-signals">
+            {% for sig in tp.signals %}
+            <div class="tp-signal">&#x2022; {{ sig }}</div>
+            {% endfor %}
+          </div>
+          {% if tp.time_pattern %}
+          <div class="tp-time">&#x1F551; {{ tp.time_pattern }}</div>
+          {% endif %}
         </div>
       </div>
       {% endif %}

@@ -82,6 +82,8 @@ class HPAData:
     max_replicas: int
     metrics: list
     scale_target_ref: str
+    scale_down_stabilization_seconds: Optional[int] = None
+    scale_up_stabilization_seconds: Optional[int] = None
 
 
 @dataclass
@@ -143,6 +145,33 @@ class IngressData:
 
 
 @dataclass
+class CronJobData:
+    name: str
+    namespace: str
+    schedule: str
+    suspend: bool
+
+
+@dataclass
+class PodDisruptionBudgetData:
+    name: str
+    namespace: str
+    min_available: Optional[str]
+    max_unavailable: Optional[str]
+    selector: dict
+
+
+@dataclass
+class KEDAScaledObjectData:
+    name: str
+    namespace: str
+    scale_target_ref: str
+    min_replicas: int
+    max_replicas: int
+    triggers: list
+
+
+@dataclass
 class ClusterData:
     cluster_type: str
     namespace: str
@@ -156,6 +185,9 @@ class ClusterData:
     service_accounts: list = field(default_factory=list)
     role_bindings: list = field(default_factory=list)
     ingresses: list = field(default_factory=list)
+    cronjobs: list = field(default_factory=list)
+    pdbs: list = field(default_factory=list)
+    keda_objects: list = field(default_factory=list)
 
 
 def _parse_container(c) -> ContainerSpec:
@@ -348,6 +380,21 @@ def collect(namespace: str = "default", context: Optional[str] = None) -> Cluste
         if hasattr(h.spec, "metrics") and h.spec.metrics:
             for m in h.spec.metrics:
                 metrics.append({"type": m.type})
+        scale_down_stab = None
+        scale_up_stab = None
+        if use_v2:
+            behavior = getattr(h.spec, "behavior", None)
+            if behavior:
+                sd = getattr(behavior, "scale_down", None)
+                if sd:
+                    v = getattr(sd, "stabilization_window_seconds", None)
+                    if v is not None:
+                        scale_down_stab = v
+                su = getattr(behavior, "scale_up", None)
+                if su:
+                    v = getattr(su, "stabilization_window_seconds", None)
+                    if v is not None:
+                        scale_up_stab = v
         hpas.append(HPAData(
             name=h.metadata.name,
             namespace=h.metadata.namespace,
@@ -355,6 +402,8 @@ def collect(namespace: str = "default", context: Optional[str] = None) -> Cluste
             max_replicas=h.spec.max_replicas or 10,
             metrics=metrics,
             scale_target_ref=h.spec.scale_target_ref.name,
+            scale_down_stabilization_seconds=scale_down_stab,
+            scale_up_stabilization_seconds=scale_up_stab,
         ))
 
     pvcs = []
@@ -457,6 +506,71 @@ def collect(namespace: str = "default", context: Optional[str] = None) -> Cluste
             annotations=ing.metadata.annotations or {},
         ))
 
+    batch_v1 = client.BatchV1Api()
+    cronjobs = []
+    try:
+        raw_cjs = batch_v1.list_cron_job_for_all_namespaces().items if all_ns else \
+                  batch_v1.list_namespaced_cron_job(namespace).items
+        for cj in raw_cjs:
+            cronjobs.append(CronJobData(
+                name=cj.metadata.name,
+                namespace=cj.metadata.namespace,
+                schedule=cj.spec.schedule or "",
+                suspend=bool(cj.spec.suspend),
+            ))
+    except Exception:
+        pass
+
+    pdbs = []
+    try:
+        policy_v1 = client.PolicyV1Api()
+        raw_pdbs = policy_v1.list_pod_disruption_budget_for_all_namespaces().items if all_ns else \
+                   policy_v1.list_namespaced_pod_disruption_budget(namespace).items
+        for pdb in raw_pdbs:
+            min_avail = str(pdb.spec.min_available) if pdb.spec.min_available is not None else None
+            max_unavail = str(pdb.spec.max_unavailable) if pdb.spec.max_unavailable is not None else None
+            sel = {}
+            if pdb.spec.selector and pdb.spec.selector.match_labels:
+                sel = pdb.spec.selector.match_labels
+            pdbs.append(PodDisruptionBudgetData(
+                name=pdb.metadata.name,
+                namespace=pdb.metadata.namespace,
+                min_available=min_avail,
+                max_unavailable=max_unavail,
+                selector=sel,
+            ))
+    except Exception:
+        pass
+
+    keda_objects = []
+    try:
+        custom_api = client.CustomObjectsApi()
+        if all_ns:
+            raw_keda = custom_api.list_cluster_custom_object(
+                group="keda.sh", version="v1alpha1", plural="scaledobjects"
+            ).get("items", [])
+        else:
+            raw_keda = custom_api.list_namespaced_custom_object(
+                group="keda.sh", version="v1alpha1", namespace=namespace, plural="scaledobjects"
+            ).get("items", [])
+        for item in raw_keda:
+            spec = item.get("spec", {})
+            meta = item.get("metadata", {})
+            triggers = [
+                {"type": t.get("type"), "metadata": t.get("metadata", {})}
+                for t in spec.get("triggers", [])
+            ]
+            keda_objects.append(KEDAScaledObjectData(
+                name=meta.get("name", ""),
+                namespace=meta.get("namespace", ""),
+                scale_target_ref=spec.get("scaleTargetRef", {}).get("name", ""),
+                min_replicas=spec.get("minReplicaCount", 0),
+                max_replicas=spec.get("maxReplicaCount", 10),
+                triggers=triggers,
+            ))
+    except Exception:
+        pass
+
     return ClusterData(
         cluster_type=cluster_type,
         namespace=namespace,
@@ -470,4 +584,7 @@ def collect(namespace: str = "default", context: Optional[str] = None) -> Cluste
         service_accounts=service_accounts,
         role_bindings=role_bindings,
         ingresses=ingresses,
+        cronjobs=cronjobs,
+        pdbs=pdbs,
+        keda_objects=keda_objects,
     )

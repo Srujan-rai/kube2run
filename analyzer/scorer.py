@@ -22,11 +22,12 @@ class ServiceResult:
     hpa_min: int = 0
     hpa_max: int = 10
     port: int = 8080
+    traffic_profile: Optional[object] = None
 
 
 def score_and_build(deployment, workload_checks, traffic_checks, network_checks,
                     hpa=None, service=None, network_policies=None, region="us-central1",
-                    project="YOUR_PROJECT") -> ServiceResult:
+                    project="YOUR_PROJECT", traffic_profile=None) -> ServiceResult:
 
     all_checks = workload_checks + traffic_checks + network_checks
 
@@ -63,12 +64,20 @@ def score_and_build(deployment, workload_checks, traffic_checks, network_checks,
         hpa_min = hpa.min_replicas or 0
         hpa_max = hpa.max_replicas or 10
 
-    concurrency = 80
+    # override with traffic profile recommendations when available
+    if traffic_profile:
+        hpa_min = traffic_profile.recommended_min_instances
+        hpa_max = traffic_profile.recommended_max_instances
+
     mem_mib = _parse_memory_mib(memory)
-    if mem_mib and mem_mib >= 8192:
+    if traffic_profile and traffic_profile.recommended_concurrency is not None:
+        concurrency = traffic_profile.recommended_concurrency
+    elif mem_mib and mem_mib >= 8192:
         concurrency = 20
     elif mem_mib and mem_mib >= 4096:
         concurrency = 40
+    else:
+        concurrency = 80
 
     needs_vpc = any(c.id in ("np_egress_cidr", "cluster_local_hostname") for c in all_checks)
     internal_ingress = any(c.id == "np_ingress_namespace_selector" for c in all_checks)
@@ -131,6 +140,7 @@ def score_and_build(deployment, workload_checks, traffic_checks, network_checks,
         hpa_min=hpa_min,
         hpa_max=hpa_max,
         port=port,
+        traffic_profile=traffic_profile,
     )
 
 
